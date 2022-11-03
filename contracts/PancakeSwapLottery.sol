@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IRandomNumberGenerator.sol";
 import "./interfaces/IPancakeSwapLottery.sol";
+import "./ACCUCoin.sol"
 
 /** @title PancakeSwap Lottery.
  * @notice It is a contract for a lottery system using
@@ -37,6 +38,10 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
 
     IERC20 public cakeToken;
     IRandomNumberGenerator public randomGenerator;
+
+    constructor() {
+        token = new ACCUCoin(100000000 * 1e18); //100 Million total supply 
+    }
 
     enum Status {
         Pending,
