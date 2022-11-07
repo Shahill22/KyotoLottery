@@ -39,9 +39,7 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
     IERC20 public cakeToken;
     IRandomNumberGenerator public randomGenerator;
 
-    constructor() {
-        token = new ACCUCoin(100000000 * 1e18); //100 Million total supply 
-    }
+    
 
     enum Status {
         Pending,
