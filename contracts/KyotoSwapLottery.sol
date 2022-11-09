@@ -7,14 +7,15 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IRandomNumberGenerator.sol";
-import "./interfaces/IPancakeSwapLottery.sol";
-import "./ACCUCoin.sol"
+import "./interfaces/IKyotoSwapLottery.sol";
 
-/** @title PancakeSwap Lottery.
+//import "./ACCUCoin.sol"
+
+/** @title KyotoSwap Lottery.
  * @notice It is a contract for a lottery system using
  * randomness provided externally.
  */
-contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
+contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
     using SafeERC20 for IERC20;
 
     address public injectorAddress;
@@ -26,8 +27,8 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
 
     uint256 public maxNumberTicketsPerBuyOrClaim = 100;
 
-    uint256 public maxPriceTicketInCake = 50 ether;
-    uint256 public minPriceTicketInCake = 0.005 ether;
+    uint256 public maxPriceTicketInKSwap = 50 ether;
+    uint256 public minPriceTicketInKSwap = 0.005 ether;
 
     uint256 public pendingInjectionNextLottery;
 
@@ -36,10 +37,8 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
     uint256 public constant MAX_LENGTH_LOTTERY = 4 days + 5 minutes; // 4 days
     uint256 public constant MAX_TREASURY_FEE = 3000; // 30%
 
-    IERC20 public cakeToken;
+    IERC20 public kSwapToken;
     IRandomNumberGenerator public randomGenerator;
-
-    
 
     enum Status {
         Pending,
@@ -48,11 +47,21 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
         Claimable
     }
 
+    struct Reward {
+        address contractAddr;
+        uint256 quantity;
+    }
+
+    enum RewardType {
+        DEFAULT,
+        ERC20
+    }
+
     struct Lottery {
         Status status;
         uint256 startTime;
         uint256 endTime;
-        uint256 priceTicketInCake;
+        uint256 priceTicketInKSwap;
         uint256 discountDivisor;
         uint256[6] rewardsBreakdown; // 0: 1 matching number // 5: 6 matching numbers
         uint256 treasuryFee; // 500: 5% // 200: 2% // 50: 0.5%
@@ -62,6 +71,8 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
         uint256 firstTicketIdNextLottery;
         uint256 amountCollectedInCake;
         uint32 finalNumber;
+        RewardType rewardType;
+        Reward reward;
     }
 
     struct Ticket {
@@ -77,10 +88,12 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
     mapping(uint32 => uint32) private _bracketCalculator;
 
     // Keeps track of number of ticket per unique combination for each lotteryId
-    mapping(uint256 => mapping(uint32 => uint256)) private _numberTicketsPerLotteryId;
+    mapping(uint256 => mapping(uint32 => uint256))
+        private _numberTicketsPerLotteryId;
 
     // Keep track of user ticket ids for a given lotteryId
-    mapping(address => mapping(uint256 => uint256[])) private _userTicketIdsPerLotteryId;
+    mapping(address => mapping(uint256 => uint256[]))
+        private _userTicketIdsPerLotteryId;
 
     modifier notContract() {
         require(!_isContract(msg.sender), "Contract not allowed");
@@ -94,35 +107,58 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
     }
 
     modifier onlyOwnerOrInjector() {
-        require((msg.sender == owner()) || (msg.sender == injectorAddress), "Not owner or injector");
+        require(
+            (msg.sender == owner()) || (msg.sender == injectorAddress),
+            "Not owner or injector"
+        );
         _;
     }
 
     event AdminTokenRecovery(address token, uint256 amount);
-    event LotteryClose(uint256 indexed lotteryId, uint256 firstTicketIdNextLottery);
+    event LotteryClose(
+        uint256 indexed lotteryId,
+        uint256 firstTicketIdNextLottery
+    );
     event LotteryInjection(uint256 indexed lotteryId, uint256 injectedAmount);
     event LotteryOpen(
         uint256 indexed lotteryId,
         uint256 startTime,
         uint256 endTime,
-        uint256 priceTicketInCake,
+        uint256 priceTicketInKSwap,
         uint256 firstTicketId,
         uint256 injectedAmount
     );
-    event LotteryNumberDrawn(uint256 indexed lotteryId, uint256 finalNumber, uint256 countWinningTickets);
-    event NewOperatorAndTreasuryAndInjectorAddresses(address operator, address treasury, address injector);
+    event LotteryNumberDrawn(
+        uint256 indexed lotteryId,
+        uint256 finalNumber,
+        uint256 countWinningTickets
+    );
+    event NewOperatorAndTreasuryAndInjectorAddresses(
+        address operator,
+        address treasury,
+        address injector
+    );
     event NewRandomGenerator(address indexed randomGenerator);
-    event TicketsPurchase(address indexed buyer, uint256 indexed lotteryId, uint256 numberTickets);
-    event TicketsClaim(address indexed claimer, uint256 amount, uint256 indexed lotteryId, uint256 numberTickets);
+    event TicketsPurchase(
+        address indexed buyer,
+        uint256 indexed lotteryId,
+        uint256 numberTickets
+    );
+    event TicketsClaim(
+        address indexed claimer,
+        uint256 amount,
+        uint256 indexed lotteryId,
+        uint256 numberTickets
+    );
 
     /**
      * @notice Constructor
      * @dev RandomNumberGenerator must be deployed prior to this contract
-     * @param _cakeTokenAddress: address of the CAKE token
+     * @param _KSWAPTokenAddress: address of the KSWAP token
      * @param _randomGeneratorAddress: address of the RandomGenerator contract used to work with ChainLink VRF
      */
-    constructor(address _cakeTokenAddress, address _randomGeneratorAddress) {
-        cakeToken = IERC20(_cakeTokenAddress);
+    constructor(address _KSWAPTokenAddress, address _randomGeneratorAddress) {
+        kSwapToken = IERC20(_KSWAPTokenAddress);
         randomGenerator = IRandomNumberGenerator(_randomGeneratorAddress);
 
         // Initializes a mapping
@@ -147,39 +183,72 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
         nonReentrant
     {
         require(_ticketNumbers.length != 0, "No ticket specified");
-        require(_ticketNumbers.length <= maxNumberTicketsPerBuyOrClaim, "Too many tickets");
+        require(
+            _ticketNumbers.length <= maxNumberTicketsPerBuyOrClaim,
+            "Too many tickets"
+        );
 
-        require(_lotteries[_lotteryId].status == Status.Open, "Lottery is not open");
-        require(block.timestamp < _lotteries[_lotteryId].endTime, "Lottery is over");
+        require(
+            _lotteries[_lotteryId].status == Status.Open,
+            "Lottery is not open"
+        );
+        require(
+            block.timestamp < _lotteries[_lotteryId].endTime,
+            "Lottery is over"
+        );
 
-        // Calculate number of CAKE to this contract
-        uint256 amountCakeToTransfer = _calculateTotalPriceForBulkTickets(
+        // Calculate number of KSWAP to this contract
+        uint256 amountKSWAPToTransfer = _calculateTotalPriceForBulkTickets(
             _lotteries[_lotteryId].discountDivisor,
-            _lotteries[_lotteryId].priceTicketInCake,
+            _lotteries[_lotteryId].priceTicketInKSwap,
             _ticketNumbers.length
         );
 
-        // Transfer cake tokens to this contract
-        cakeToken.safeTransferFrom(address(msg.sender), address(this), amountCakeToTransfer);
+        // Transfer kswap tokens to this contract
+        kSwapToken.safeTransferFrom(
+            address(msg.sender),
+            address(this),
+            amountKSWAPToTransfer
+        );
 
         // Increment the total amount collected for the lottery round
-        _lotteries[_lotteryId].amountCollectedInCake += amountCakeToTransfer;
+        _lotteries[_lotteryId].amountCollectedInCake += amountKSWAPToTransfer;
 
         for (uint256 i = 0; i < _ticketNumbers.length; i++) {
             uint32 thisTicketNumber = _ticketNumbers[i];
 
-            require((thisTicketNumber >= 1000000) && (thisTicketNumber <= 1999999), "Outside range");
+            require(
+                (thisTicketNumber >= 1000000) && (thisTicketNumber <= 1999999),
+                "Outside range"
+            );
 
-            _numberTicketsPerLotteryId[_lotteryId][1 + (thisTicketNumber % 10)]++;
-            _numberTicketsPerLotteryId[_lotteryId][11 + (thisTicketNumber % 100)]++;
-            _numberTicketsPerLotteryId[_lotteryId][111 + (thisTicketNumber % 1000)]++;
-            _numberTicketsPerLotteryId[_lotteryId][1111 + (thisTicketNumber % 10000)]++;
-            _numberTicketsPerLotteryId[_lotteryId][11111 + (thisTicketNumber % 100000)]++;
-            _numberTicketsPerLotteryId[_lotteryId][111111 + (thisTicketNumber % 1000000)]++;
+            _numberTicketsPerLotteryId[_lotteryId][
+                1 + (thisTicketNumber % 10)
+            ]++;
+            _numberTicketsPerLotteryId[_lotteryId][
+                11 + (thisTicketNumber % 100)
+            ]++;
+            _numberTicketsPerLotteryId[_lotteryId][
+                111 + (thisTicketNumber % 1000)
+            ]++;
+            _numberTicketsPerLotteryId[_lotteryId][
+                1111 + (thisTicketNumber % 10000)
+            ]++;
+            _numberTicketsPerLotteryId[_lotteryId][
+                11111 + (thisTicketNumber % 100000)
+            ]++;
+            _numberTicketsPerLotteryId[_lotteryId][
+                111111 + (thisTicketNumber % 1000000)
+            ]++;
 
-            _userTicketIdsPerLotteryId[msg.sender][_lotteryId].push(currentTicketId);
+            _userTicketIdsPerLotteryId[msg.sender][_lotteryId].push(
+                currentTicketId
+            );
 
-            _tickets[currentTicketId] = Ticket({number: thisTicketNumber, owner: msg.sender});
+            _tickets[currentTicketId] = Ticket({
+                number: thisTicketNumber,
+                owner: msg.sender
+            });
 
             // Increase lottery ticket number
             currentTicketId++;
@@ -202,44 +271,79 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
     ) external override notContract nonReentrant {
         require(_ticketIds.length == _brackets.length, "Not same length");
         require(_ticketIds.length != 0, "Length must be >0");
-        require(_ticketIds.length <= maxNumberTicketsPerBuyOrClaim, "Too many tickets");
-        require(_lotteries[_lotteryId].status == Status.Claimable, "Lottery not claimable");
+        require(
+            _ticketIds.length <= maxNumberTicketsPerBuyOrClaim,
+            "Too many tickets"
+        );
+        require(
+            _lotteries[_lotteryId].status == Status.Claimable,
+            "Lottery not claimable"
+        );
 
-        // Initializes the rewardInCakeToTransfer
-        uint256 rewardInCakeToTransfer;
+        // Initializes the rewardInKSWAPToTransfer
+        uint256 rewardInTokenToTransfer;
 
         for (uint256 i = 0; i < _ticketIds.length; i++) {
             require(_brackets[i] < 6, "Bracket out of range"); // Must be between 0 and 5
 
             uint256 thisTicketId = _ticketIds[i];
 
-            require(_lotteries[_lotteryId].firstTicketIdNextLottery > thisTicketId, "TicketId too high");
-            require(_lotteries[_lotteryId].firstTicketId <= thisTicketId, "TicketId too low");
-            require(msg.sender == _tickets[thisTicketId].owner, "Not the owner");
+            require(
+                _lotteries[_lotteryId].firstTicketIdNextLottery > thisTicketId,
+                "TicketId too high"
+            );
+            require(
+                _lotteries[_lotteryId].firstTicketId <= thisTicketId,
+                "TicketId too low"
+            );
+            require(
+                msg.sender == _tickets[thisTicketId].owner,
+                "Not the owner"
+            );
 
             // Update the lottery ticket owner to 0x address
             _tickets[thisTicketId].owner = address(0);
 
-            uint256 rewardForTicketId = _calculateRewardsForTicketId(_lotteryId, thisTicketId, _brackets[i]);
+            uint256 rewardForTicketId = _calculateRewardsForTicketId(
+                _lotteryId,
+                thisTicketId,
+                _brackets[i]
+            );
 
             // Check user is claiming the correct bracket
             require(rewardForTicketId != 0, "No prize for this bracket");
 
             if (_brackets[i] != 5) {
                 require(
-                    _calculateRewardsForTicketId(_lotteryId, thisTicketId, _brackets[i] + 1) == 0,
+                    _calculateRewardsForTicketId(
+                        _lotteryId,
+                        thisTicketId,
+                        _brackets[i] + 1
+                    ) == 0,
                     "Bracket must be higher"
                 );
             }
 
             // Increment the reward to transfer
-            rewardInCakeToTransfer += rewardForTicketId;
+            rewardInTokenToTransfer += rewardForTicketId;
         }
 
         // Transfer money to msg.sender
-        cakeToken.safeTransfer(msg.sender, rewardInCakeToTransfer);
+        if (RewardType.ERC20 == _lotteries[_lotteryId].rewardType) {
+            IERC20(_lotteries[_lotteryId].reward.contractAddr).safeTransfer(
+                msg.sender,
+                rewardInTokenToTransfer
+            );
+        } else {
+            kSwapToken.safeTransfer(msg.sender, rewardInTokenToTransfer);
+        }
 
-        emit TicketsClaim(msg.sender, rewardInCakeToTransfer, _lotteryId, _ticketIds.length);
+        emit TicketsClaim(
+            msg.sender,
+            rewardInTokenToTransfer,
+            _lotteryId,
+            _ticketIds.length
+        );
     }
 
     /**
@@ -247,13 +351,26 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
      * @param _lotteryId: lottery id
      * @dev Callable by operator
      */
-    function closeLottery(uint256 _lotteryId) external override onlyOperator nonReentrant {
-        require(_lotteries[_lotteryId].status == Status.Open, "Lottery not open");
-        require(block.timestamp > _lotteries[_lotteryId].endTime, "Lottery not over");
+    function closeLottery(uint256 _lotteryId)
+        external
+        override
+        onlyOperator
+        nonReentrant
+    {
+        require(
+            _lotteries[_lotteryId].status == Status.Open,
+            "Lottery not open"
+        );
+        require(
+            block.timestamp > _lotteries[_lotteryId].endTime,
+            "Lottery not over"
+        );
         _lotteries[_lotteryId].firstTicketIdNextLottery = currentTicketId;
 
         // Request a random number from the generator based on a seed
-        randomGenerator.getRandomNumber(uint256(keccak256(abi.encodePacked(_lotteryId, currentTicketId))));
+        randomGenerator.getRandomNumber(
+            uint256(keccak256(abi.encodePacked(_lotteryId, currentTicketId)))
+        );
 
         _lotteries[_lotteryId].status = Status.Close;
 
@@ -261,19 +378,23 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
     }
 
     /**
-     * @notice Draw the final number, calculate reward in CAKE per group, and make lottery claimable
+     * @notice Draw the final number, calculate reward in KSWAP per group, and make lottery claimable
      * @param _lotteryId: lottery id
      * @param _autoInjection: reinjects funds into next lottery (vs. withdrawing all)
      * @dev Callable by operator
      */
-    function drawFinalNumberAndMakeLotteryClaimable(uint256 _lotteryId, bool _autoInjection)
-        external
-        override
-        onlyOperator
-        nonReentrant
-    {
-        require(_lotteries[_lotteryId].status == Status.Close, "Lottery not close");
-        require(_lotteryId == randomGenerator.viewLatestLotteryId(), "Numbers not drawn");
+    function drawFinalNumberAndMakeLotteryClaimable(
+        uint256 _lotteryId,
+        bool _autoInjection
+    ) external override onlyOperator nonReentrant {
+        require(
+            _lotteries[_lotteryId].status == Status.Close,
+            "Lottery not close"
+        );
+        require(
+            _lotteryId == randomGenerator.viewLatestLotteryId(),
+            "Numbers not drawn"
+        );
 
         // Calculate the finalNumber based on the randomResult generated by ChainLink's fallback
         uint32 finalNumber = randomGenerator.viewRandomResult();
@@ -281,45 +402,64 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
         // Initialize a number to count addresses in the previous bracket
         uint256 numberAddressesInPreviousBracket;
 
-        // Calculate the amount to share post-treasury fee
+        // // Calculate the amount to share post-treasury fee
+        // uint256 amountToShareToWinners = (
+        //     ((_lotteries[_lotteryId].amountCollectedInCake) * (10000 - _lotteries[_lotteryId].treasuryFee))
+        // ) / 10000;
+        uint256 rewardCollected;
+        if (RewardType.ERC20 == _lotteries[_lotteryId].rewardType) {
+            rewardCollected = _lotteries[_lotteryId].reward.quantity;
+        } else {
+            rewardCollected = _lotteries[_lotteryId].amountCollectedInCake;
+        }
+
         uint256 amountToShareToWinners = (
-            ((_lotteries[_lotteryId].amountCollectedInCake) * (10000 - _lotteries[_lotteryId].treasuryFee))
+            ((rewardCollected) * (10000 - _lotteries[_lotteryId].treasuryFee))
         ) / 10000;
 
         // Initializes the amount to withdraw to treasury
         uint256 amountToWithdrawToTreasury;
 
-        // Calculate prizes in CAKE for each bracket by starting from the highest one
+        // Calculate prizes in KSWAP for each bracket by starting from the highest one
         for (uint32 i = 0; i < 6; i++) {
             uint32 j = 5 - i;
-            uint32 transformedWinningNumber = _bracketCalculator[j] + (finalNumber % (uint32(10)**(j + 1)));
+            uint32 transformedWinningNumber = _bracketCalculator[j] +
+                (finalNumber % (uint32(10)**(j + 1)));
 
             _lotteries[_lotteryId].countWinnersPerBracket[j] =
-                _numberTicketsPerLotteryId[_lotteryId][transformedWinningNumber] -
+                _numberTicketsPerLotteryId[_lotteryId][
+                    transformedWinningNumber
+                ] -
                 numberAddressesInPreviousBracket;
 
             // A. If number of users for this _bracket number is superior to 0
             if (
-                (_numberTicketsPerLotteryId[_lotteryId][transformedWinningNumber] - numberAddressesInPreviousBracket) !=
-                0
+                (_numberTicketsPerLotteryId[_lotteryId][
+                    transformedWinningNumber
+                ] - numberAddressesInPreviousBracket) != 0
             ) {
                 // B. If rewards at this bracket are > 0, calculate, else, report the numberAddresses from previous bracket
                 if (_lotteries[_lotteryId].rewardsBreakdown[j] != 0) {
                     _lotteries[_lotteryId].cakePerBracket[j] =
-                        ((_lotteries[_lotteryId].rewardsBreakdown[j] * amountToShareToWinners) /
-                            (_numberTicketsPerLotteryId[_lotteryId][transformedWinningNumber] -
-                                numberAddressesInPreviousBracket)) /
+                        ((_lotteries[_lotteryId].rewardsBreakdown[j] *
+                            amountToShareToWinners) /
+                            (_numberTicketsPerLotteryId[_lotteryId][
+                                transformedWinningNumber
+                            ] - numberAddressesInPreviousBracket)) /
                         10000;
 
                     // Update numberAddressesInPreviousBracket
-                    numberAddressesInPreviousBracket = _numberTicketsPerLotteryId[_lotteryId][transformedWinningNumber];
+                    numberAddressesInPreviousBracket = _numberTicketsPerLotteryId[
+                        _lotteryId
+                    ][transformedWinningNumber];
                 }
-                // A. No CAKE to distribute, they are added to the amount to withdraw to treasury address
+                // A. No KSWAP to distribute, they are added to the amount to withdraw to treasury address
             } else {
                 _lotteries[_lotteryId].cakePerBracket[j] = 0;
 
                 amountToWithdrawToTreasury +=
-                    (_lotteries[_lotteryId].rewardsBreakdown[j] * amountToShareToWinners) /
+                    (_lotteries[_lotteryId].rewardsBreakdown[j] *
+                        amountToShareToWinners) /
                     10000;
             }
         }
@@ -333,12 +473,30 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
             amountToWithdrawToTreasury = 0;
         }
 
-        amountToWithdrawToTreasury += (_lotteries[_lotteryId].amountCollectedInCake - amountToShareToWinners);
+        //amountToWithdrawToTreasury += (_lotteries[_lotteryId].amountCollectedInCake - amountToShareToWinners);
 
-        // Transfer CAKE to treasury address
-        cakeToken.safeTransfer(treasuryAddress, amountToWithdrawToTreasury);
-
-        emit LotteryNumberDrawn(currentLotteryId, finalNumber, numberAddressesInPreviousBracket);
+        // Transfer KSWAP to treasury address
+        if (RewardType.ERC20 == _lotteries[_lotteryId].rewardType) {
+            amountToWithdrawToTreasury += (_lotteries[_lotteryId]
+                .reward
+                .quantity - amountToShareToWinners);
+            IERC20(_lotteries[_lotteryId].reward.contractAddr).safeTransfer(
+                treasuryAddress,
+                amountToWithdrawToTreasury
+            );
+        } else {
+            amountToWithdrawToTreasury += (_lotteries[_lotteryId]
+                .amountCollectedInCake - amountToShareToWinners);
+            kSwapToken.safeTransfer(
+                treasuryAddress,
+                amountToWithdrawToTreasury
+            );
+        }
+        emit LotteryNumberDrawn(
+            currentLotteryId,
+            finalNumber,
+            numberAddressesInPreviousBracket
+        );
     }
 
     /**
@@ -348,15 +506,21 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
      * Callable only by the contract owner
      * @param _randomGeneratorAddress: address of the random generator
      */
-    function changeRandomGenerator(address _randomGeneratorAddress) external onlyOwner {
+    function changeRandomGenerator(address _randomGeneratorAddress)
+        external
+        onlyOwner
+    {
         require(
-            (currentLotteryId == 0) || (_lotteries[currentLotteryId].status == Status.Claimable),
+            (currentLotteryId == 0) ||
+                (_lotteries[currentLotteryId].status == Status.Claimable),
             "Lottery not in claimable"
         );
 
         // Request a random number from the generator based on a seed
         IRandomNumberGenerator(_randomGeneratorAddress).getRandomNumber(
-            uint256(keccak256(abi.encodePacked(currentLotteryId, currentTicketId)))
+            uint256(
+                keccak256(abi.encodePacked(currentLotteryId, currentTicketId))
+            )
         );
 
         // Calculate the finalNumber based on the randomResult generated by ChainLink's fallback
@@ -370,13 +534,24 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
     /**
      * @notice Inject funds
      * @param _lotteryId: lottery id
-     * @param _amount: amount to inject in CAKE token
+     * @param _amount: amount to inject in KSWAP token
      * @dev Callable by owner or injector address
      */
-    function injectFunds(uint256 _lotteryId, uint256 _amount) external override onlyOwnerOrInjector {
-        require(_lotteries[_lotteryId].status == Status.Open, "Lottery not open");
+    function injectFunds(uint256 _lotteryId, uint256 _amount)
+        external
+        override
+        onlyOwnerOrInjector
+    {
+        require(
+            _lotteries[_lotteryId].status == Status.Open,
+            "Lottery not open"
+        );
 
-        cakeToken.safeTransferFrom(address(msg.sender), address(this), _amount);
+        kSwapToken.safeTransferFrom(
+            address(msg.sender),
+            address(this),
+            _amount
+        );
         _lotteries[_lotteryId].amountCollectedInCake += _amount;
 
         emit LotteryInjection(_lotteryId, _amount);
@@ -386,34 +561,43 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
      * @notice Start the lottery
      * @dev Callable by operator
      * @param _endTime: endTime of the lottery
-     * @param _priceTicketInCake: price of a ticket in CAKE
+     * @param _priceTicketInKSwap: price of a ticket in KSWAP
      * @param _discountDivisor: the divisor to calculate the discount magnitude for bulks
      * @param _rewardsBreakdown: breakdown of rewards per bracket (must sum to 10,000)
      * @param _treasuryFee: treasury fee (10,000 = 100%, 100 = 1%)
      */
     function startLottery(
         uint256 _endTime,
-        uint256 _priceTicketInCake,
+        uint256 _priceTicketInKSwap,
         uint256 _discountDivisor,
         uint256[6] calldata _rewardsBreakdown,
-        uint256 _treasuryFee
+        uint256 _treasuryFee,
+        uint8 _rewardType,
+        address _contractAddr,
+        uint256 _rewardQuantity
     ) external override onlyOperator {
         require(
-            (currentLotteryId == 0) || (_lotteries[currentLotteryId].status == Status.Claimable),
+            (currentLotteryId == 0) ||
+                (_lotteries[currentLotteryId].status == Status.Claimable),
             "Not time to start lottery"
         );
 
         require(
-            ((_endTime - block.timestamp) > MIN_LENGTH_LOTTERY) && ((_endTime - block.timestamp) < MAX_LENGTH_LOTTERY),
+            ((_endTime - block.timestamp) > MIN_LENGTH_LOTTERY) &&
+                ((_endTime - block.timestamp) < MAX_LENGTH_LOTTERY),
             "Lottery length outside of range"
         );
 
         require(
-            (_priceTicketInCake >= minPriceTicketInCake) && (_priceTicketInCake <= maxPriceTicketInCake),
+            (_priceTicketInKSwap >= minPriceTicketInKSwap) &&
+                (_priceTicketInKSwap <= maxPriceTicketInKSwap),
             "Outside of limits"
         );
 
-        require(_discountDivisor >= MIN_DISCOUNT_DIVISOR, "Discount divisor too low");
+        require(
+            _discountDivisor >= MIN_DISCOUNT_DIVISOR,
+            "Discount divisor too low"
+        );
         require(_treasuryFee <= MAX_TREASURY_FEE, "Treasury fee too high");
 
         require(
@@ -428,27 +612,53 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
 
         currentLotteryId++;
 
+        if (RewardType.ERC20 == RewardType(_rewardType)) {
+            //Reward token transfer to lottery contract
+            IERC20(_contractAddr).safeTransferFrom(
+                address(msg.sender),
+                address(this),
+                _rewardQuantity
+            );
+            _rewardQuantity = IERC20(_contractAddr).balanceOf(address(this));
+        }
+
         _lotteries[currentLotteryId] = Lottery({
             status: Status.Open,
             startTime: block.timestamp,
             endTime: _endTime,
-            priceTicketInCake: _priceTicketInCake,
+            priceTicketInKSwap: _priceTicketInKSwap,
             discountDivisor: _discountDivisor,
             rewardsBreakdown: _rewardsBreakdown,
             treasuryFee: _treasuryFee,
-            cakePerBracket: [uint256(0), uint256(0), uint256(0), uint256(0), uint256(0), uint256(0)],
-            countWinnersPerBracket: [uint256(0), uint256(0), uint256(0), uint256(0), uint256(0), uint256(0)],
+            cakePerBracket: [
+                uint256(0),
+                uint256(0),
+                uint256(0),
+                uint256(0),
+                uint256(0),
+                uint256(0)
+            ],
+            countWinnersPerBracket: [
+                uint256(0),
+                uint256(0),
+                uint256(0),
+                uint256(0),
+                uint256(0),
+                uint256(0)
+            ],
             firstTicketId: currentTicketId,
             firstTicketIdNextLottery: currentTicketId,
             amountCollectedInCake: pendingInjectionNextLottery,
-            finalNumber: 0
+            finalNumber: 0,
+            rewardType: RewardType(_rewardType),
+            reward: Reward(_contractAddr, _rewardQuantity)
         });
 
         emit LotteryOpen(
             currentLotteryId,
             block.timestamp,
             _endTime,
-            _priceTicketInCake,
+            _priceTicketInKSwap,
             currentTicketId,
             pendingInjectionNextLottery
         );
@@ -462,8 +672,11 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
      * @param _tokenAmount: the number of token amount to withdraw
      * @dev Only callable by owner.
      */
-    function recoverWrongTokens(address _tokenAddress, uint256 _tokenAmount) external onlyOwner {
-        require(_tokenAddress != address(cakeToken), "Cannot be CAKE token");
+    function recoverWrongTokens(address _tokenAddress, uint256 _tokenAmount)
+        external
+        onlyOwner
+    {
+        require(_tokenAddress != address(kSwapToken), "Cannot be KSWAP token");
 
         IERC20(_tokenAddress).safeTransfer(address(msg.sender), _tokenAmount);
 
@@ -471,26 +684,32 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
     }
 
     /**
-     * @notice Set CAKE price ticket upper/lower limit
+     * @notice Set KSWAP price ticket upper/lower limit
      * @dev Only callable by owner
-     * @param _minPriceTicketInCake: minimum price of a ticket in CAKE
-     * @param _maxPriceTicketInCake: maximum price of a ticket in CAKE
+     * @param _minPriceTicketInCake: minimum price of a ticket in KSWAP
+     * @param _maxPriceTicketInCake: maximum price of a ticket in KSWAP
      */
-    function setMinAndMaxTicketPriceInCake(uint256 _minPriceTicketInCake, uint256 _maxPriceTicketInCake)
-        external
-        onlyOwner
-    {
-        require(_minPriceTicketInCake <= _maxPriceTicketInCake, "minPrice must be < maxPrice");
+    function setMinAndMaxTicketPriceInCake(
+        uint256 _minPriceTicketInCake,
+        uint256 _maxPriceTicketInCake
+    ) external onlyOwner {
+        require(
+            _minPriceTicketInCake <= _maxPriceTicketInCake,
+            "minPrice must be < maxPrice"
+        );
 
-        minPriceTicketInCake = _minPriceTicketInCake;
-        maxPriceTicketInCake = _maxPriceTicketInCake;
+        minPriceTicketInKSwap = _minPriceTicketInCake;
+        maxPriceTicketInKSwap = _maxPriceTicketInCake;
     }
 
     /**
      * @notice Set max number of tickets
      * @dev Only callable by owner
      */
-    function setMaxNumberTicketsPerBuy(uint256 _maxNumberTicketsPerBuy) external onlyOwner {
+    function setMaxNumberTicketsPerBuy(uint256 _maxNumberTicketsPerBuy)
+        external
+        onlyOwner
+    {
         require(_maxNumberTicketsPerBuy != 0, "Must be > 0");
         maxNumberTicketsPerBuyOrClaim = _maxNumberTicketsPerBuy;
     }
@@ -515,13 +734,17 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
         treasuryAddress = _treasuryAddress;
         injectorAddress = _injectorAddress;
 
-        emit NewOperatorAndTreasuryAndInjectorAddresses(_operatorAddress, _treasuryAddress, _injectorAddress);
+        emit NewOperatorAndTreasuryAndInjectorAddresses(
+            _operatorAddress,
+            _treasuryAddress,
+            _injectorAddress
+        );
     }
 
     /**
      * @notice Calculate price of a set of tickets
      * @param _discountDivisor: divisor for the discount
-     * @param _priceTicket price of a ticket (in CAKE)
+     * @param _priceTicket price of a ticket (in KSWAP)
      * @param _numberTickets number of tickets to buy
      */
     function calculateTotalPriceForBulkTickets(
@@ -529,10 +752,18 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
         uint256 _priceTicket,
         uint256 _numberTickets
     ) external pure returns (uint256) {
-        require(_discountDivisor >= MIN_DISCOUNT_DIVISOR, "Must be >= MIN_DISCOUNT_DIVISOR");
+        require(
+            _discountDivisor >= MIN_DISCOUNT_DIVISOR,
+            "Must be >= MIN_DISCOUNT_DIVISOR"
+        );
         require(_numberTickets != 0, "Number of tickets must be > 0");
 
-        return _calculateTotalPriceForBulkTickets(_discountDivisor, _priceTicket, _numberTickets);
+        return
+            _calculateTotalPriceForBulkTickets(
+                _discountDivisor,
+                _priceTicket,
+                _numberTickets
+            );
     }
 
     /**
@@ -546,7 +777,11 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
      * @notice View lottery information
      * @param _lotteryId: lottery id
      */
-    function viewLottery(uint256 _lotteryId) external view returns (Lottery memory) {
+    function viewLottery(uint256 _lotteryId)
+        external
+        view
+        returns (Lottery memory)
+    {
         return _lotteries[_lotteryId];
     }
 
@@ -627,7 +862,9 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
         )
     {
         uint256 length = _size;
-        uint256 numberTicketsBoughtAtLotteryId = _userTicketIdsPerLotteryId[_user][_lotteryId].length;
+        uint256 numberTicketsBoughtAtLotteryId = _userTicketIdsPerLotteryId[
+            _user
+        ][_lotteryId].length;
 
         if (length > (numberTicketsBoughtAtLotteryId - _cursor)) {
             length = numberTicketsBoughtAtLotteryId - _cursor;
@@ -638,7 +875,9 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
         bool[] memory ticketStatuses = new bool[](length);
 
         for (uint256 i = 0; i < length; i++) {
-            lotteryTicketIds[i] = _userTicketIdsPerLotteryId[_user][_lotteryId][i + _cursor];
+            lotteryTicketIds[i] = _userTicketIdsPerLotteryId[_user][_lotteryId][
+                i + _cursor
+            ];
             ticketNumbers[i] = _tickets[lotteryTicketIds[i]].number;
 
             // True = ticket claimed
@@ -650,7 +889,12 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
             }
         }
 
-        return (lotteryTicketIds, ticketNumbers, ticketStatuses, _cursor + length);
+        return (
+            lotteryTicketIds,
+            ticketNumbers,
+            ticketStatuses,
+            _cursor + length
+        );
     }
 
     /**
@@ -674,7 +918,8 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
         uint32 transformedWinningNumber = _bracketCalculator[_bracket] +
             (winningTicketNumber % (uint32(10)**(_bracket + 1)));
 
-        uint32 transformedUserNumber = _bracketCalculator[_bracket] + (userNumber % (uint32(10)**(_bracket + 1)));
+        uint32 transformedUserNumber = _bracketCalculator[_bracket] +
+            (userNumber % (uint32(10)**(_bracket + 1)));
 
         // Confirm that the two transformed numbers are the same, if not throw
         if (transformedWinningNumber == transformedUserNumber) {
@@ -695,7 +940,10 @@ contract PancakeSwapLottery is ReentrancyGuard, IPancakeSwapLottery, Ownable {
         uint256 _priceTicket,
         uint256 _numberTickets
     ) internal pure returns (uint256) {
-        return (_priceTicket * _numberTickets * (_discountDivisor + 1 - _numberTickets)) / _discountDivisor;
+        return
+            (_priceTicket *
+                _numberTickets *
+                (_discountDivisor + 1 - _numberTickets)) / _discountDivisor;
     }
 
     /**

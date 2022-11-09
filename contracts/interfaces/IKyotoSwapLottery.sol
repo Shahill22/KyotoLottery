@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.0;
 
-interface IPancakeSwapLottery {
+interface IKyotoSwapLottery {
     /**
      * @notice Buy tickets for the current lottery
      * @param _lotteryId: lotteryId
      * @param _ticketNumbers: array of ticket numbers between 1,000,000 and 1,999,999
      * @dev Callable by users
      */
-    function buyTickets(uint256 _lotteryId, uint32[] calldata _ticketNumbers) external;
+    function buyTickets(uint256 _lotteryId, uint32[] calldata _ticketNumbers)
+        external;
 
     /**
      * @notice Claim a set of winning tickets for a lottery
@@ -36,7 +37,10 @@ interface IPancakeSwapLottery {
      * @param _autoInjection: reinjects funds into next lottery (vs. withdrawing all)
      * @dev Callable by operator
      */
-    function drawFinalNumberAndMakeLotteryClaimable(uint256 _lotteryId, bool _autoInjection) external;
+    function drawFinalNumberAndMakeLotteryClaimable(
+        uint256 _lotteryId,
+        bool _autoInjection
+    ) external;
 
     /**
      * @notice Inject funds
@@ -60,7 +64,10 @@ interface IPancakeSwapLottery {
         uint256 _priceTicketInCake,
         uint256 _discountDivisor,
         uint256[6] calldata _rewardsBreakdown,
-        uint256 _treasuryFee
+        uint256 _treasuryFee,
+        uint8 _rewardType,
+        address _contractAddr,
+        uint256 _contractQuantity
     ) external;
 
     /**
