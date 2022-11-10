@@ -89,10 +89,22 @@ contract(
         });
       });
 
-      it("Users mint and approve CAKE to be used in the lottery", async () => {
+      it("Users mint and approve Kyoto to be used in the lottery", async () => {
         for (let thisUser of [alice, bob, carol, david, erin, injector]) {
-          await mockkyoto.mintTokens(parseEther("100000"), { from: thisUser });
-          await mockkyoto.approve(lottery.address, parseEther("100000"), {
+          await mockKyoto.mintTokens(parseEther("100000"), { from: thisUser });
+          await mockKyoto.approve(lottery.address, parseEther("100000"), {
+            from: thisUser,
+          });
+        }
+      });
+      // Reward token minting
+
+      it("Users mint and approve Kyoto to be used in the lottery", async () => {
+        for (let thisUser of [alice, injector]) {
+          await rewardToken.mintTokens(parseEther("100000"), {
+            from: thisUser,
+          });
+          await rewardToken.approve(lottery.address, parseEther("100000"), {
             from: thisUser,
           });
         }
@@ -353,7 +365,7 @@ contract(
         );
       });
 
-      it("Owner does 10k Kyoto injection", async () => {
+      it("Owner does 10k reward token injection", async () => {
         result = await lottery.injectFunds("1", parseEther("10000"), {
           from: alice,
         });
@@ -370,7 +382,7 @@ contract(
 
         expectEvent.inTransaction(
           result.receipt.transactionHash,
-          mockKyoto,
+          rewardToken,
           "Transfer",
           {
             from: alice,
