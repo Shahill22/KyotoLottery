@@ -456,7 +456,7 @@ contract(
 
         expectEvent.inTransaction(
           result.receipt.transactionHash,
-          mockCake,
+          rewardToken,
           "Transfer",
           {
             from: lottery.address,
@@ -497,7 +497,7 @@ contract(
 
         expectEvent.inTransaction(
           result.receipt.transactionHash,
-          mockCake,
+          rewardToken,
           "Transfer",
           {
             from: lottery.address,
@@ -588,7 +588,7 @@ contract(
             "Not the owner"
           );
         });
-
+        //-----------------------------------------------------------------------------------------------------------------------------//
         it("Operator cannot start lottery if length is too short/long", async () => {
           const currentLengthLottery = _lengthLottery;
 
@@ -601,7 +601,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               endTimeTarget,
-              _priceTicketInCake,
+              _priceTicketInKSwap,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -621,7 +621,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               endTimeTarget,
-              _priceTicketInCake,
+              _priceTicketInKSwap,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -648,7 +648,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               endTime,
-              _priceTicketInCake,
+              _priceTicketInKSwap,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -672,7 +672,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               endTime,
-              _priceTicketInCake,
+              _priceTicketInKSwap,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
