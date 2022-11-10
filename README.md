@@ -2,4 +2,4 @@
 
 ## Description
 
-A lottery for CAKE tokens built with Chainlink's VRF.
+A lottery for Kyoto tokens built with Chainlink's VRF.
