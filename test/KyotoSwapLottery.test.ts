@@ -1,4 +1,4 @@
-import { parseEther } from "ethers/lib/utils";
+import { parseBytes32String, parseEther } from "ethers/lib/utils";
 import { artifacts, contract } from "hardhat";
 import { assert, expect } from "chai";
 import {
@@ -34,11 +34,14 @@ contract(
     const _totalInitSupply = parseEther("10000");
 
     let _lengthLottery = new BN("14400"); // 4h
-    let _priceTicketInKSwap = parseEther("0.5");
+    let _priceTicketInKyoto = parseEther("0.5");
     let _discountDivisor = "2000";
 
     let _rewardsBreakdown = ["200", "300", "500", "1500", "2500", "5000"];
     let _treasuryFee = "2000";
+
+    //let _rewardType = parseString("DEFAULT");
+    let _rewardQuantity = "4000";
 
     // Contracts
     let lottery, mockKyoto, randomNumberGenerator, rewardToken;
@@ -99,7 +102,7 @@ contract(
       });
       // Reward token minting
 
-      it("Users mint and approve Kyoto to be used in the lottery", async () => {
+      it("Users mint and approve reward token to be used in the lottery", async () => {
         for (let thisUser of [alice, injector]) {
           await rewardToken.mintTokens(parseEther("100000"), {
             from: thisUser,
@@ -115,10 +118,13 @@ contract(
 
         result = await lottery.startLottery(
           endTime,
-          _priceTicketInKSwap,
+          _priceTicketInKyoto,
           _discountDivisor,
           _rewardsBreakdown,
           _treasuryFee,
+          //_rewardType,
+          //rewardToken.address,
+          //_rewardQuantity,
           { from: operator }
         );
 
@@ -126,7 +132,7 @@ contract(
           lotteryId: "1",
           startTime: (await time.latest()).toString(),
           endTime: endTime.toString(),
-          priceTicketInCake: _priceTicketInKSwap.toString(),
+          priceTicketInKyoto: _priceTicketInKyoto.toString(),
           firstTicketId: "0",
           injectedAmount: "0",
         });
@@ -613,7 +619,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               endTimeTarget,
-              _priceTicketInKSwap,
+              _priceTicketInKyoto,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -633,7 +639,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               endTimeTarget,
-              _priceTicketInKSwap,
+              _priceTicketInKyoto,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -660,7 +666,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               endTime,
-              _priceTicketInKSwap,
+              _priceTicketInKyoto,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -684,7 +690,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               endTime,
-              _priceTicketInKSwap,
+              _priceTicketInKyoto,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -700,12 +706,12 @@ contract(
         });
 
         it("Operator cannot start lottery if ticket price too low or too high", async () => {
-          let newPriceTicketInCake = parseEther("0.0049999999");
+          let newPriceTicketInKyoto = parseEther("0.0049999999");
 
           await expectRevert(
             lottery.startLottery(
               endTime,
-              newPriceTicketInCake,
+              newPriceTicketInKyoto,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -716,12 +722,12 @@ contract(
             "Outside of limits"
           );
 
-          newPriceTicketInCake = parseEther("0.0049999999");
+          newPriceTicketInKyoto = parseEther("0.0049999999");
 
           await expectRevert(
             lottery.startLottery(
               endTime,
-              newPriceTicketInCake,
+              newPriceTicketInKyoto,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -741,7 +747,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               endTime,
-              _priceTicketInCake,
+              _priceTicketInKyoto,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -757,7 +763,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               endTime,
-              _priceTicketInCake,
+              _priceTicketInKyoto,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -784,7 +790,7 @@ contract(
 
           result = await lottery.startLottery(
             endTime,
-            _priceTicketInCake,
+            _priceTicketInKyoto,
             _discountDivisor,
             _rewardsBreakdown,
             _treasuryFee,
@@ -795,7 +801,7 @@ contract(
             lotteryId: "2",
             startTime: (await time.latest()).toString(),
             endTime: endTime.toString(),
-            priceTicketInCake: _priceTicketInCake.toString(),
+            priceTicketInCake: _priceTicketInKyoto.toString(),
             firstTicketId: "111",
             injectedAmount: parseEther("3619.0809").toString(),
           });
@@ -821,7 +827,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               _lengthLottery,
-              _priceTicketInCake,
+              _priceTicketInKyoto,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -968,7 +974,7 @@ contract(
 
           expectEvent.inTransaction(
             result.receipt.transactionHash,
-            mockCake,
+            mockKyoto,
             "Transfer",
             {
               from: lottery.address,
@@ -1004,7 +1010,7 @@ contract(
 
           result = await lottery.startLottery(
             endTime,
-            _priceTicketInCake,
+            _priceTicketInKyoto,
             _discountDivisor,
             _rewardsBreakdown,
             _treasuryFee,
@@ -1015,7 +1021,7 @@ contract(
             lotteryId: "3",
             startTime: (await time.latest()).toString(),
             endTime: endTime.toString(),
-            priceTicketInCake: _priceTicketInCake.toString(),
+            priceTicketInCake: _priceTicketInKyoto.toString(),
             firstTicketId: "113",
             injectedAmount: "0",
           });
@@ -1076,7 +1082,7 @@ contract(
 
           result = await lottery.startLottery(
             endTime,
-            _priceTicketInCake,
+            _priceTicketInKyoto,
             _discountDivisor,
             newRewardsBreakdown,
             _treasuryFee,
@@ -1087,7 +1093,7 @@ contract(
             lotteryId: "4",
             startTime: (await time.latest()).toString(),
             endTime: endTime.toString(),
-            priceTicketInCake: _priceTicketInCake.toString(),
+            priceTicketInCake: _priceTicketInKyoto.toString(),
             firstTicketId: "113",
             injectedAmount: "0",
           });
@@ -1112,7 +1118,7 @@ contract(
 
           expectEvent.inTransaction(
             result.receipt.transactionHash,
-            mockCake,
+            mockKyoto,
             "Transfer",
             {
               from: carol,
@@ -1142,7 +1148,7 @@ contract(
           // 20% * 1002.9925 = 200.5985 CAKE
           expectEvent.inTransaction(
             result.receipt.transactionHash,
-            mockCake,
+            mockKyoto,
             "Transfer",
             {
               from: lottery.address,
@@ -1253,7 +1259,7 @@ contract(
           });
 
           await expectRevert(
-            lottery.recoverWrongTokens(mockCake.address, parseEther("1"), {
+            lottery.recoverWrongTokens(mockKyoto.address, parseEther("1"), {
               from: alice,
             }),
             "Cannot be CAKE token"
@@ -1264,7 +1270,7 @@ contract(
           await expectRevert(
             lottery.startLottery(
               _lengthLottery,
-              _priceTicketInCake,
+              _priceTicketInKyoto,
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
@@ -1309,7 +1315,7 @@ contract(
           );
 
           await expectRevert(
-            lottery.recoverWrongTokens(mockCake.address, parseEther("10"), {
+            lottery.recoverWrongTokens(mockKyoto.address, parseEther("10"), {
               from: operator,
             }),
             "Ownable: caller is not the owner"
@@ -1366,3 +1372,6 @@ contract(
     });
   }
 );
+function parseString(arg0: string) {
+  throw new Error("Function not implemented.");
+}

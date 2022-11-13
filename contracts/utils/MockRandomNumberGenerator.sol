@@ -3,10 +3,10 @@ pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/IRandomNumberGenerator.sol";
-import "../interfaces/IPancakeSwapLottery.sol";
+import "../interfaces/IKyotoSwapLottery.sol";
 
 contract MockRandomNumberGenerator is IRandomNumberGenerator, Ownable {
-    address public pancakeSwapLottery;
+    address public kyotoSwapLottery;
     uint32 public randomResult;
     uint256 public nextRandomResult;
     uint256 public latestLotteryId;
@@ -19,10 +19,10 @@ contract MockRandomNumberGenerator is IRandomNumberGenerator, Ownable {
 
     /**
      * @notice Set the address for the PancakeSwapLottery
-     * @param _pancakeSwapLottery: address of the PancakeSwap lottery
+     * @param _kyotoSwapLottery: address of the PancakeSwap lottery
      */
-    function setLotteryAddress(address _pancakeSwapLottery) external onlyOwner {
-        pancakeSwapLottery = _pancakeSwapLottery;
+    function setLotteryAddress(address _kyotoSwapLottery) external onlyOwner {
+        kyotoSwapLottery = _kyotoSwapLottery;
     }
 
     /**
@@ -38,7 +38,7 @@ contract MockRandomNumberGenerator is IRandomNumberGenerator, Ownable {
      * @param _seed: seed provided by the PancakeSwap lottery
      */
     function getRandomNumber(uint256 _seed) external override {
-        require(msg.sender == pancakeSwapLottery, "Only PancakeSwapLottery");
+        require(msg.sender == kyotoSwapLottery, "Only PancakeSwapLottery");
         fulfillRandomness(0, nextRandomResult);
     }
 
@@ -46,7 +46,8 @@ contract MockRandomNumberGenerator is IRandomNumberGenerator, Ownable {
      * @notice Change latest lotteryId to currentLotteryId
      */
     function changeLatestLotteryId() external {
-        latestLotteryId = IPancakeSwapLottery(pancakeSwapLottery).viewCurrentLotteryId();
+        latestLotteryId = IKyotoSwapLottery(kyotoSwapLottery)
+            .viewCurrentLotteryId();
     }
 
     /**

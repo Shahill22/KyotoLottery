@@ -6,12 +6,16 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@chainlink/contracts/src/v0.8/dev/VRFConsumerBase.sol";
 import "./interfaces/IRandomNumberGenerator.sol";
-import "./interfaces/IPancakeSwapLottery.sol";
+import "./interfaces/IKyotoSwapLottery.sol";
 
-contract RandomNumberGenerator is VRFConsumerBase, IRandomNumberGenerator, Ownable {
+contract RandomNumberGenerator is
+    VRFConsumerBase,
+    IRandomNumberGenerator,
+    Ownable
+{
     using SafeERC20 for IERC20;
 
-    address public pancakeSwapLottery;
+    address public kyotoSwapLottery;
     bytes32 public keyHash;
     bytes32 public latestRequestId;
     uint32 public randomResult;
@@ -26,7 +30,9 @@ contract RandomNumberGenerator is VRFConsumerBase, IRandomNumberGenerator, Ownab
      * @param _vrfCoordinator: address of the VRF coordinator
      * @param _linkToken: address of the LINK token
      */
-    constructor(address _vrfCoordinator, address _linkToken) VRFConsumerBase(_vrfCoordinator, _linkToken) {
+    constructor(address _vrfCoordinator, address _linkToken)
+        VRFConsumerBase(_vrfCoordinator, _linkToken)
+    {
         //
     }
 
@@ -35,7 +41,7 @@ contract RandomNumberGenerator is VRFConsumerBase, IRandomNumberGenerator, Ownab
      * @param _seed: seed provided by the PancakeSwap lottery
      */
     function getRandomNumber(uint256 _seed) external override {
-        require(msg.sender == pancakeSwapLottery, "Only PancakeSwapLottery");
+        require(msg.sender == kyotoSwapLottery, "Only PancakeSwapLottery");
         require(keyHash != bytes32(0), "Must have valid key hash");
         require(LINK.balanceOf(address(this)) >= fee, "Not enough LINK tokens");
 
@@ -60,10 +66,10 @@ contract RandomNumberGenerator is VRFConsumerBase, IRandomNumberGenerator, Ownab
 
     /**
      * @notice Set the address for the PancakeSwapLottery
-     * @param _pancakeSwapLottery: address of the PancakeSwap lottery
+     * @param _kyotoSwapLottery: address of the PancakeSwap lottery
      */
-    function setLotteryAddress(address _pancakeSwapLottery) external onlyOwner {
-        pancakeSwapLottery = _pancakeSwapLottery;
+    function setLotteryAddress(address _kyotoSwapLottery) external onlyOwner {
+        kyotoSwapLottery = _kyotoSwapLottery;
     }
 
     /**
@@ -72,7 +78,10 @@ contract RandomNumberGenerator is VRFConsumerBase, IRandomNumberGenerator, Ownab
      * @param _tokenAmount: the number of token amount to withdraw
      * @dev Only callable by owner.
      */
-    function withdrawTokens(address _tokenAddress, uint256 _tokenAmount) external onlyOwner {
+    function withdrawTokens(address _tokenAddress, uint256 _tokenAmount)
+        external
+        onlyOwner
+    {
         IERC20(_tokenAddress).safeTransfer(address(msg.sender), _tokenAmount);
     }
 
@@ -93,9 +102,13 @@ contract RandomNumberGenerator is VRFConsumerBase, IRandomNumberGenerator, Ownab
     /**
      * @notice Callback function used by ChainLink's VRF Coordinator
      */
-    function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
+    function fulfillRandomness(bytes32 requestId, uint256 randomness)
+        internal
+        override
+    {
         require(latestRequestId == requestId, "Wrong requestId");
         randomResult = uint32(1000000 + (randomness % 1000000));
-        latestLotteryId = IPancakeSwapLottery(pancakeSwapLottery).viewCurrentLotteryId();
+        latestLotteryId = IKyotoSwapLottery(kyotoSwapLottery)
+            .viewCurrentLotteryId();
     }
 }
