@@ -64,11 +64,11 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
         uint256 discountDivisor;
         uint256[6] rewardsBreakdown; // 0: 1 matching number // 5: 6 matching numbers
         uint256 treasuryFee; // 500: 5% // 200: 2% // 50: 0.5%
-        uint256[6] cakePerBracket;
+        uint256[6] kswapPerBracket;
         uint256[6] countWinnersPerBracket;
         uint256 firstTicketId;
         uint256 firstTicketIdNextLottery;
-        uint256 amountCollectedInCake;
+        uint256 amountCollectedInKSwap;
         uint32 finalNumber;
         RewardType rewardType;
         Reward reward;
@@ -153,11 +153,11 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
     /**
      * @notice Constructor
      * @dev RandomNumberGenerator must be deployed prior to this contract
-     * @param _cakeTokenAddress: address of the KSWAP token
+     * @param _kswapTokenAddress: address of the KSWAP token
      * @param _randomGeneratorAddress: address of the RandomGenerator contract used to work with ChainLink VRF
      */
-    constructor(address _cakeTokenAddress, address _randomGeneratorAddress) {
-        kSwapToken = IERC20(_cakeTokenAddress);
+    constructor(address _kswapTokenAddress, address _randomGeneratorAddress) {
+        kSwapToken = IERC20(_kswapTokenAddress);
         randomGenerator = IRandomNumberGenerator(_randomGeneratorAddress);
 
         // Initializes a mapping
@@ -197,7 +197,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
         );
 
         // Calculate number of KSWAP to this contract
-        uint256 amountCakeToTransfer = _calculateTotalPriceForBulkTickets(
+        uint256 amountKSwapToTransfer = _calculateTotalPriceForBulkTickets(
             _lotteries[_lotteryId].discountDivisor,
             _lotteries[_lotteryId].priceTicketInKSwap,
             _ticketNumbers.length
@@ -207,12 +207,12 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
         kSwapToken.safeTransferFrom(
             address(msg.sender),
             address(this),
-            amountCakeToTransfer
+            amountKSwapToTransfer
         );
 
         //This needs to be maanged in a roll over fashion in pendingInjectionNextLottery  //Dependency due to reward type
         // Increment the total amount collected for the lottery round
-        _lotteries[_lotteryId].amountCollectedInCake += amountCakeToTransfer;
+        _lotteries[_lotteryId].amountCollectedInKSwap += amountKSwapToTransfer;
 
         for (uint256 i = 0; i < _ticketNumbers.length; i++) {
             uint32 thisTicketNumber = _ticketNumbers[i];
@@ -280,7 +280,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
             "Lottery not claimable"
         );
 
-        // Initializes the rewardInCakeToTransfer
+        // Initializes the rewardInKSwapToTransfer
         uint256 rewardInTokenToTransfer;
 
         for (uint256 i = 0; i < _ticketIds.length; i++) {
@@ -404,13 +404,13 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
 
         // // Calculate the amount to share post-treasury fee
         // uint256 amountToShareToWinners = (
-        //     ((_lotteries[_lotteryId].amountCollectedInCake) * (10000 - _lotteries[_lotteryId].treasuryFee))
+        //     ((_lotteries[_lotteryId].amountCollectedInKSwap) * (10000 - _lotteries[_lotteryId].treasuryFee))
         // ) / 10000;
         uint256 rewardCollected;
         if (RewardType.ERC20 == _lotteries[_lotteryId].rewardType) {
             rewardCollected = _lotteries[_lotteryId].reward.quantity;
         } else {
-            rewardCollected = _lotteries[_lotteryId].amountCollectedInCake;
+            rewardCollected = _lotteries[_lotteryId].amountCollectedInKSwap;
         }
 
         uint256 amountToShareToWinners = (
@@ -440,7 +440,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
             ) {
                 // B. If rewards at this bracket are > 0, calculate, else, report the numberAddresses from previous bracket
                 if (_lotteries[_lotteryId].rewardsBreakdown[j] != 0) {
-                    _lotteries[_lotteryId].cakePerBracket[j] =
+                    _lotteries[_lotteryId].kswapPerBracket[j] =
                         ((_lotteries[_lotteryId].rewardsBreakdown[j] *
                             amountToShareToWinners) /
                             (_numberTicketsPerLotteryId[_lotteryId][
@@ -455,7 +455,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
                 }
                 // A. No KSWAP to distribute, they are added to the amount to withdraw to treasury address
             } else {
-                _lotteries[_lotteryId].cakePerBracket[j] = 0;
+                _lotteries[_lotteryId].kswapPerBracket[j] = 0;
 
                 amountToWithdrawToTreasury +=
                     (_lotteries[_lotteryId].rewardsBreakdown[j] *
@@ -478,7 +478,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
             }
         }
 
-        //amountToWithdrawToTreasury += (_lotteries[_lotteryId].amountCollectedInCake - amountToShareToWinners);
+        //amountToWithdrawToTreasury += (_lotteries[_lotteryId].amountCollectedInKSwap - amountToShareToWinners);
 
         // Transfer KSWAP to treasury address
         if (RewardType.ERC20 == _lotteries[_lotteryId].rewardType) {
@@ -491,7 +491,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
             );
         } else {
             amountToWithdrawToTreasury += (_lotteries[_lotteryId]
-                .amountCollectedInCake - amountToShareToWinners);
+                .amountCollectedInKSwap - amountToShareToWinners);
             kSwapToken.safeTransfer(
                 treasuryAddress,
                 amountToWithdrawToTreasury
@@ -565,7 +565,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
                 address(this),
                 _amount
             );
-            _lotteries[_lotteryId].amountCollectedInCake += _amount;
+            _lotteries[_lotteryId].amountCollectedInKSwap += _amount;
         }
 
         emit LotteryInjection(_lotteryId, _amount);
@@ -640,7 +640,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
             discountDivisor: _discountDivisor,
             rewardsBreakdown: _rewardsBreakdown,
             treasuryFee: _treasuryFee,
-            cakePerBracket: [
+            kswapPerBracket: [
                 uint256(0),
                 uint256(0),
                 uint256(0),
@@ -658,7 +658,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
             ],
             firstTicketId: currentTicketId,
             firstTicketIdNextLottery: currentTicketId,
-            amountCollectedInCake: pendingInjectionNextLottery,
+            amountCollectedInKSwap: pendingInjectionNextLottery,
             finalNumber: 0,
             rewardType: RewardType(_rewardType),
             reward: Reward(_contractAddr, pendingInjectionNextLotteryInERC20) //Updating the pending Injection
@@ -709,20 +709,20 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
     /**
      * @notice Set KSWAP price ticket upper/lower limit
      * @dev Only callable by owner
-     * @param _minPriceTicketInCake: minimum price of a ticket in KSWAP
-     * @param _maxPriceTicketInCake: maximum price of a ticket in KSWAP
+     * @param _minPriceTicketInKSwap: minimum price of a ticket in KSWAP
+     * @param _maxPriceTicketInKSwap: maximum price of a ticket in KSWAP
      */
-    function setMinAndMaxTicketPriceInCake(
-        uint256 _minPriceTicketInCake,
-        uint256 _maxPriceTicketInCake
+    function setMinAndMaxTicketPriceInKSwap(
+        uint256 _minPriceTicketInKSwap,
+        uint256 _maxPriceTicketInKSwap
     ) external onlyOwner {
         require(
-            _minPriceTicketInCake <= _maxPriceTicketInCake,
+            _minPriceTicketInKSwap <= _maxPriceTicketInKSwap,
             "minPrice must be < maxPrice"
         );
 
-        minPriceTicketInKSwap = _minPriceTicketInCake;
-        maxPriceTicketInKSwap = _maxPriceTicketInCake;
+        minPriceTicketInKSwap = _minPriceTicketInKSwap;
+        maxPriceTicketInKSwap = _maxPriceTicketInKSwap;
     }
 
     /**
@@ -946,7 +946,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
 
         // Confirm that the two transformed numbers are the same, if not throw
         if (transformedWinningNumber == transformedUserNumber) {
-            return _lotteries[_lotteryId].cakePerBracket[_bracket];
+            return _lotteries[_lotteryId].kswapPerBracket[_bracket];
         } else {
             return 0;
         }
