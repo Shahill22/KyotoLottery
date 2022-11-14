@@ -40,7 +40,7 @@ contract(
     let _rewardsBreakdown = ["200", "300", "500", "1500", "2500", "5000"];
     let _treasuryFee = "2000";
 
-    //let _rewardType = parseString("DEFAULT");
+    let _rewardType = "0";
     let _rewardQuantity = "4000";
 
     // Contracts
@@ -122,9 +122,9 @@ contract(
           _discountDivisor,
           _rewardsBreakdown,
           _treasuryFee,
-          //_rewardType,
-          //rewardToken.address,
-          //_rewardQuantity,
+          _rewardType,
+          rewardToken.address,
+          _rewardQuantity,
           { from: operator }
         );
 
