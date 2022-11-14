@@ -9,8 +9,6 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IRandomNumberGenerator.sol";
 import "./interfaces/IKyotoSwapLottery.sol";
 
-//import "./ACCUCoin.sol"
-
 /** @title KyotoSwap Lottery.
  * @notice It is a contract for a lottery system using
  * randomness provided externally.
@@ -31,6 +29,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
     uint256 public minPriceTicketInKSwap = 0.005 ether;
 
     uint256 public pendingInjectionNextLottery;
+    uint256 public pendingInjectionNextLotteryInERC20;
 
     uint256 public constant MIN_DISCOUNT_DIVISOR = 300;
     uint256 public constant MIN_LENGTH_LOTTERY = 4 hours - 5 minutes; // 4 hours
@@ -154,11 +153,11 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
     /**
      * @notice Constructor
      * @dev RandomNumberGenerator must be deployed prior to this contract
-     * @param _KSWAPTokenAddress: address of the KSWAP token
+     * @param _cakeTokenAddress: address of the KSWAP token
      * @param _randomGeneratorAddress: address of the RandomGenerator contract used to work with ChainLink VRF
      */
-    constructor(address _KSWAPTokenAddress, address _randomGeneratorAddress) {
-        kSwapToken = IERC20(_KSWAPTokenAddress);
+    constructor(address _cakeTokenAddress, address _randomGeneratorAddress) {
+        kSwapToken = IERC20(_cakeTokenAddress);
         randomGenerator = IRandomNumberGenerator(_randomGeneratorAddress);
 
         // Initializes a mapping
@@ -198,7 +197,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
         );
 
         // Calculate number of KSWAP to this contract
-        uint256 amountKSWAPToTransfer = _calculateTotalPriceForBulkTickets(
+        uint256 amountCakeToTransfer = _calculateTotalPriceForBulkTickets(
             _lotteries[_lotteryId].discountDivisor,
             _lotteries[_lotteryId].priceTicketInKSwap,
             _ticketNumbers.length
@@ -208,11 +207,12 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
         kSwapToken.safeTransferFrom(
             address(msg.sender),
             address(this),
-            amountKSWAPToTransfer
+            amountCakeToTransfer
         );
 
+        //This needs to be maanged in a roll over fashion in pendingInjectionNextLottery  //Dependency due to reward type
         // Increment the total amount collected for the lottery round
-        _lotteries[_lotteryId].amountCollectedInCake += amountKSWAPToTransfer;
+        _lotteries[_lotteryId].amountCollectedInCake += amountCakeToTransfer;
 
         for (uint256 i = 0; i < _ticketNumbers.length; i++) {
             uint32 thisTicketNumber = _ticketNumbers[i];
@@ -280,7 +280,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
             "Lottery not claimable"
         );
 
-        // Initializes the rewardInKSWAPToTransfer
+        // Initializes the rewardInCakeToTransfer
         uint256 rewardInTokenToTransfer;
 
         for (uint256 i = 0; i < _ticketIds.length; i++) {
@@ -469,8 +469,13 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
         _lotteries[_lotteryId].status = Status.Claimable;
 
         if (_autoInjection) {
-            pendingInjectionNextLottery = amountToWithdrawToTreasury;
-            amountToWithdrawToTreasury = 0;
+            if (RewardType.ERC20 == _lotteries[_lotteryId].rewardType) {
+                pendingInjectionNextLotteryInERC20 = amountToWithdrawToTreasury;
+                amountToWithdrawToTreasury = 0;
+            } else {
+                pendingInjectionNextLottery = amountToWithdrawToTreasury;
+                amountToWithdrawToTreasury = 0;
+            }
         }
 
         //amountToWithdrawToTreasury += (_lotteries[_lotteryId].amountCollectedInCake - amountToShareToWinners);
@@ -547,12 +552,21 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
             "Lottery not open"
         );
 
-        kSwapToken.safeTransferFrom(
-            address(msg.sender),
-            address(this),
-            _amount
-        );
-        _lotteries[_lotteryId].amountCollectedInCake += _amount;
+        if (RewardType.ERC20 == _lotteries[_lotteryId].rewardType) {
+            IERC20(_lotteries[_lotteryId].reward.contractAddr).safeTransferFrom(
+                    address(msg.sender),
+                    address(this),
+                    _amount
+                );
+            _lotteries[_lotteryId].reward.quantity += _amount;
+        } else {
+            kSwapToken.safeTransferFrom(
+                address(msg.sender),
+                address(this),
+                _amount
+            );
+            _lotteries[_lotteryId].amountCollectedInCake += _amount;
+        }
 
         emit LotteryInjection(_lotteryId, _amount);
     }
@@ -612,15 +626,11 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
 
         currentLotteryId++;
 
-        if (RewardType.ERC20 == RewardType(_rewardType)) {
-            //Reward token transfer to lottery contract
-            IERC20(_contractAddr).safeTransferFrom(
-                address(msg.sender),
-                address(this),
-                _rewardQuantity
-            );
-            _rewardQuantity = IERC20(_contractAddr).balanceOf(address(this));
-        }
+        // if (RewardType.ERC20 ==  RewardType(_rewardType)) {
+        // //Reward token transfer to lottery contract
+        // IERC20(_contractAddr).safeTransferFrom(address(msg.sender), address(this),_rewardQuantity);
+        // _rewardQuantity = IERC20(_contractAddr).balanceOf(address(this));
+        // }
 
         _lotteries[currentLotteryId] = Lottery({
             status: Status.Open,
@@ -651,19 +661,32 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
             amountCollectedInCake: pendingInjectionNextLottery,
             finalNumber: 0,
             rewardType: RewardType(_rewardType),
-            reward: Reward(_contractAddr, _rewardQuantity)
+            reward: Reward(_contractAddr, pendingInjectionNextLotteryInERC20) //Updating the pending Injection
         });
 
-        emit LotteryOpen(
-            currentLotteryId,
-            block.timestamp,
-            _endTime,
-            _priceTicketInKSwap,
-            currentTicketId,
-            pendingInjectionNextLottery
-        );
+        if (RewardType.ERC20 == RewardType(_rewardType)) {
+            emit LotteryOpen(
+                currentLotteryId,
+                block.timestamp,
+                _endTime,
+                _priceTicketInKSwap,
+                currentTicketId,
+                pendingInjectionNextLotteryInERC20
+            );
 
-        pendingInjectionNextLottery = 0;
+            pendingInjectionNextLotteryInERC20 = 0;
+        } else {
+            emit LotteryOpen(
+                currentLotteryId,
+                block.timestamp,
+                _endTime,
+                _priceTicketInKSwap,
+                currentTicketId,
+                pendingInjectionNextLottery
+            );
+
+            pendingInjectionNextLottery = 0;
+        }
     }
 
     /**
