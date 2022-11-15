@@ -1035,7 +1035,7 @@ contract(
             "TicketId too high"
           );
         });
-
+        //-----------------------------------------------------------------------------------------------------------//
         it("Lottery starts, close, and numbers get drawn without a participant", async () => {
           endTime = new BN(await time.latest()).add(_lengthLottery);
 
@@ -1270,7 +1270,7 @@ contract(
       });
 
       describe("Role exceptions", async () => {
-        it("Owner can recover funds only if not CAKE token", async () => {
+        it("Owner can recover funds only if not Kyoto token", async () => {
           // Deploy Random Token
           const randomToken = await MockERC20.new(
             "Random Token",
@@ -1299,7 +1299,7 @@ contract(
             lottery.recoverWrongTokens(mockKyoto.address, parseEther("1"), {
               from: alice,
             }),
-            "Cannot be CAKE token"
+            "Cannot be KYOTO token"
           );
         });
 
@@ -1311,6 +1311,10 @@ contract(
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
+              _rewardType,
+              rewardToken.address,
+              _rewardQuantity,
+
               {
                 from: alice,
               }
