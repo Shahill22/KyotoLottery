@@ -623,6 +623,10 @@ contract(
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
+              _rewardType,
+              rewardToken.address,
+              _rewardQuantity,
+
               {
                 from: operator,
               }
@@ -643,6 +647,9 @@ contract(
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
+              _rewardType,
+              rewardToken.address,
+              _rewardQuantity,
               {
                 from: operator,
               }
@@ -670,6 +677,9 @@ contract(
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
+              _rewardType,
+              rewardToken.address,
+              _rewardQuantity,
               {
                 from: operator,
               }
@@ -694,6 +704,9 @@ contract(
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
+              _rewardType,
+              rewardToken.address,
+              _rewardQuantity,
               {
                 from: operator,
               }
@@ -715,6 +728,9 @@ contract(
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
+              _rewardType,
+              rewardToken.address,
+              _rewardQuantity,
               {
                 from: operator,
               }
@@ -731,6 +747,9 @@ contract(
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
+              _rewardType,
+              rewardToken.address,
+              _rewardQuantity,
               {
                 from: operator,
               }
@@ -751,6 +770,9 @@ contract(
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
+              _rewardType,
+              rewardToken.address,
+              _rewardQuantity,
               {
                 from: operator,
               }
@@ -767,6 +789,9 @@ contract(
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
+              _rewardType,
+              rewardToken.address,
+              _rewardQuantity,
               {
                 from: operator,
               }
@@ -794,6 +819,9 @@ contract(
             _discountDivisor,
             _rewardsBreakdown,
             _treasuryFee,
+            _rewardType,
+            rewardToken.address,
+            _rewardQuantity,
             { from: operator }
           );
 
@@ -831,6 +859,9 @@ contract(
               _discountDivisor,
               _rewardsBreakdown,
               _treasuryFee,
+              _rewardType,
+              rewardToken.address,
+              _rewardQuantity,
               {
                 from: operator,
               }
@@ -1014,6 +1045,9 @@ contract(
             _discountDivisor,
             _rewardsBreakdown,
             _treasuryFee,
+            _rewardType,
+            rewardToken.address,
+            _rewardQuantity,
             { from: operator }
           );
 
@@ -1079,13 +1113,16 @@ contract(
             "0",
             "5000",
           ];
-
+          //-----------------------------------------------------------------------------------------------------------//
           result = await lottery.startLottery(
             endTime,
             _priceTicketInKyoto,
             _discountDivisor,
             newRewardsBreakdown,
             _treasuryFee,
+            _rewardType,
+            rewardToken.address,
+            _rewardQuantity,
             { from: operator }
           );
 
