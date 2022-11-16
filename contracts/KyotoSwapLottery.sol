@@ -699,7 +699,7 @@ contract KyotoSwapLottery is ReentrancyGuard, IKyotoSwapLottery, Ownable {
         external
         onlyOwner
     {
-        require(_tokenAddress != address(kSwapToken), "Cannot be KSWAP token");
+        require(_tokenAddress != address(kSwapToken), "Cannot be KYOTO token");
 
         IERC20(_tokenAddress).safeTransfer(address(msg.sender), _tokenAmount);
 

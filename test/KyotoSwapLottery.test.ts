@@ -132,7 +132,7 @@ contract(
           lotteryId: "1",
           startTime: (await time.latest()).toString(),
           endTime: endTime.toString(),
-          priceTicketInKyoto: _priceTicketInKyoto.toString(),
+          priceTicketInKSwap: _priceTicketInKyoto.toString(),
           firstTicketId: "0",
           injectedAmount: "0",
         });
@@ -829,7 +829,7 @@ contract(
             lotteryId: "2",
             startTime: (await time.latest()).toString(),
             endTime: endTime.toString(),
-            priceTicketInCake: _priceTicketInKyoto.toString(),
+            priceTicketInKSwap: _priceTicketInKyoto.toString(),
             firstTicketId: "111",
             injectedAmount: parseEther("3619.0809").toString(),
           });
@@ -1055,7 +1055,7 @@ contract(
             lotteryId: "3",
             startTime: (await time.latest()).toString(),
             endTime: endTime.toString(),
-            priceTicketInCake: _priceTicketInKyoto.toString(),
+            priceTicketInKSwap: _priceTicketInKyoto.toString(),
             firstTicketId: "113",
             injectedAmount: "0",
           });
@@ -1130,7 +1130,7 @@ contract(
             lotteryId: "4",
             startTime: (await time.latest()).toString(),
             endTime: endTime.toString(),
-            priceTicketInCake: _priceTicketInKyoto.toString(),
+            priceTicketInKSwap: _priceTicketInKyoto.toString(),
             firstTicketId: "113",
             injectedAmount: "0",
           });
